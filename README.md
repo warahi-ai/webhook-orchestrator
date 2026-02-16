@@ -14,10 +14,16 @@ A Python Flask application that automatically creates GitHub issues from Jira ti
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- GitHub personal access token with `repo` scope
-- Jira webhook configured with a secret
-- ngrok (for local development) or a deployed server
+- **Python 3.8 or higher**
+- **GitHub Account** with:
+  - Personal access token with `repo` scope
+  - Claude Code GitHub Action installed on your target repository
+- **Jira Account** with:
+  - Admin access to configure webhooks
+  - A Jira project (e.g., AWF)
+- **ngrok Account** (free tier works):
+  - Sign up at https://dashboard.ngrok.com/signup
+  - Required for local development to expose your server to the internet
 
 ## Setup
 
@@ -25,14 +31,18 @@ A Python Flask application that automatically creates GitHub issues from Jira ti
 
 ```bash
 cd webhook-orchestrator
-python -m venv venv
+
+# Create and activate virtual environment
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment Variables
 
-Copy the template and fill in your values:
+Create your `.env` file from the template:
 
 ```bash
 cp .env.template .env
@@ -54,61 +64,160 @@ JIRA_BASE_URL=https://warahi.atlassian.net
 PORT=5000
 ```
 
-**Getting a GitHub Token:**
-1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Generate new token with `repo` scope
-3. Copy the token to your `.env` file
+#### Getting a GitHub Token:
 
-**Jira Webhook Secret:**
-- This is set when you configure the Jira webhook (see Jira Configuration section)
+1. Go to https://github.com/settings/tokens
+2. Click **"Generate new token (classic)"**
+3. Give it a descriptive name (e.g., "Webhook Orchestrator")
+4. Select scope: **`repo`** (Full control of private repositories)
+5. Click **"Generate token"**
+6. **Copy the token immediately** (you won't see it again!)
+7. Paste it in your `.env` file as `GITHUB_TOKEN`
 
-### 3. Run the Server
+#### Jira Webhook Secret:
+
+**Note:** You'll get this secret when creating the Jira webhook in Step 5. Jira can auto-generate it for you, or you can provide your own.
+
+If you want to generate your own secret beforehand:
+```bash
+# macOS/Linux:
+openssl rand -hex 32
+```
+
+Either way, you'll need to copy the secret from Jira and paste it into your `.env` file as `JIRA_WEBHOOK_SECRET`.
+
+### 3. Run the Flask Server
 
 ```bash
+# Make sure virtual environment is activated
+source venv/bin/activate
+
+# Start the server
 python app.py
 ```
 
-The server will start on `http://0.0.0.0:5000` (or the port specified in `.env`).
+You should see:
+```
+✓ Webhook handler initialized successfully
+✓ Starting Flask server on port 5000
+✓ Running on http://127.0.0.1:5000
+```
 
-### 4. Expose with ngrok (for local development)
+Keep this terminal open and running.
 
-In a separate terminal:
+### 4. Install and Configure ngrok
+
+#### Install ngrok (macOS):
+
+```bash
+brew install ngrok
+```
+
+For other platforms, see: https://ngrok.com/download
+
+#### Authenticate ngrok:
+
+1. Sign up for a free ngrok account: https://dashboard.ngrok.com/signup
+2. Get your authtoken: https://dashboard.ngrok.com/get-started/your-authtoken
+3. Configure ngrok with your authtoken:
+   ```bash
+   ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
+   ```
+
+This is a **one-time setup** - ngrok will remember your token.
+
+#### Start ngrok tunnel:
+
+In a **new terminal** (keep the Flask server running):
 
 ```bash
 ngrok http 5000
 ```
 
-Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) for the next step.
+You'll see output like:
+```
+Forwarding  https://abc123-xyz.ngrok-free.dev -> http://localhost:5000
+```
 
-## Jira Configuration
+**Copy the HTTPS URL** (e.g., `https://abc123-xyz.ngrok-free.dev`) - you'll need it for Jira configuration.
+
+Keep this terminal open and running.
+
+## 5. Configure Jira Webhook
 
 ### Setting up the Webhook
 
-1. Go to your Jira project settings
-2. Navigate to System → WebHooks → Create a WebHook
-3. Configure the webhook:
-   - **Name:** GitHub Issue Creator
-   - **Status:** Enabled
-   - **URL:** Your ngrok URL + `/webhook` (e.g., `https://abc123.ngrok.io/webhook`)
-   - **Description:** Creates GitHub issues when tickets move to In Progress
-   - **Issue related events:** Select "Issue updated"
-   - **JQL:** `project = "AWF"` (or your project key)
-   - **Secret:** Generate a random secret and save it to your `.env` as `JIRA_WEBHOOK_SECRET`
+1. **Go to Jira Webhook Settings:**
+   - Direct URL: https://warahi.atlassian.net/plugins/servlet/webhooks
+   - Or: Jira Settings (⚙️) → System → WebHooks
 
-4. Save the webhook
+2. **Click "Create a WebHook"**
 
-### Testing the Webhook
+3. **Configure the webhook with these settings:**
 
-1. In Jira, create a test ticket
-2. Drag it to the "In Progress" column
-3. Check the Flask server logs - you should see:
+   | Field | Value |
+   |-------|-------|
+   | **Name** | `Notify Claude` or `GitHub Issue Creator` |
+   | **Status** | ✅ Enabled |
+   | **URL** | Your ngrok URL + `/webhook`<br>Example: `https://abc123-xyz.ngrok-free.dev/webhook` |
+   | **Description** | `Automatically creates GitHub issues when tickets move to In Progress` |
+   | **Events** | ✅ Issue updated |
+   | **JQL** | `project = "AWF"` (replace AWF with your project key) |
+   | **Secret** | Click "Generate" to auto-generate, or paste your own |
+   | **Exclude body** | No |
+
+4. **Copy the secret** - After creating the webhook:
+   - If you clicked "Generate", Jira will display the secret
+   - Copy this secret and add it to your `.env` file as `JIRA_WEBHOOK_SECRET`
+   - **Important:** Save it now - you may not be able to view it again!
+
+5. **Click "Create"** to save the webhook
+
+6. **Verify the webhook is enabled** (green toggle on the webhooks page)
+
+### Testing the Integration
+
+Now let's test the complete flow:
+
+1. **Go to your Jira board:**
+   - Example: https://warahi.atlassian.net/jira/software/c/projects/AWF/boards
+
+2. **Create a test ticket** (or use an existing one)
+
+3. **Drag the ticket to "In Progress" column**
+
+4. **Check the Flask server terminal** - you should see:
    ```
-   Received webhook from <IP>
-   Webhook signature verified
-   Trigger status 'In Progress' detected!
-   Successfully created GitHub issue: https://github.com/...
+   ✓ Received webhook from 127.0.0.1
+   ✓ Webhook signature verified
+   ✓ Status change detected: To Do → In Progress
+   ✓ Trigger status 'In Progress' detected!
+   ✓ Extracted ticket info for AWF-5
+   ✓ Creating GitHub issue for AWF-5
+   ✓ Successfully created GitHub issue: https://github.com/...
    ```
-4. Check your GitHub repository for the new issue
+
+5. **Check your GitHub repository** - you should see a new issue with `[AWF-X]` in the title
+
+6. **Check GitHub Actions** - Claude Code Action should automatically start working on the issue
+
+7. **Wait for Claude to finish** - it will create a branch, implement the feature, and open a PR to `develop`
+
+### Common Issues During Testing
+
+**Webhook not received:**
+- Verify ngrok is still running (URLs expire if you restart ngrok)
+- Check the webhook URL in Jira matches your current ngrok URL exactly
+- Look for delivery failures in Jira webhook history
+
+**Signature verification fails:**
+- Ensure `JIRA_WEBHOOK_SECRET` in `.env` matches exactly what's in Jira webhook
+- No extra spaces or line breaks
+
+**GitHub issue not created:**
+- Verify `GITHUB_TOKEN` has `repo` scope
+- Check GitHub token hasn't expired
+- Review Flask logs for detailed error messages
 
 ## Architecture
 
@@ -179,13 +288,19 @@ Implement OAuth 2.0 authentication for users...
 ---
 
 @claude Please implement this feature following these guidelines:
-- Create a branch named `feature/AWF-4-add-user-authentication`
+- Create a branch named `feature/AWF-4-add-user-authentication` from `develop`
 - Implement the requirements described above
 - Write comprehensive tests
-- Open a PR when ready
+- **Create a Pull Request targeting the `develop` branch**
 
 This issue was automatically created from Jira ticket AWF-4.
 ```
+
+**Note:** The `@claude` tag triggers the Claude Code GitHub Action, which will automatically:
+1. Create a feature branch from `develop`
+2. Implement the requirements
+3. Write tests
+4. Open a Pull Request targeting `develop`
 
 ## Edge Cases & Error Handling
 
@@ -219,25 +334,81 @@ Log entries include:
 - Timing-safe comparison prevents timing attacks
 - HTTPS required for production (use ngrok HTTPS for local dev)
 
+## Important Notes
+
+### ngrok URL Changes
+**The ngrok URL changes every time you restart ngrok** (on the free tier). When this happens:
+
+1. Get your new ngrok URL: Check the ngrok terminal or visit http://localhost:4040
+2. Update Jira webhook: Edit your webhook in Jira with the new URL
+3. Test again: Move a ticket to verify it works
+
+For a permanent URL, consider:
+- Upgrading to ngrok paid plan (reserved domains)
+- Deploying to a cloud service (Heroku, AWS, Railway, etc.)
+
+### Keeping Everything Running
+
+You need **3 terminals** running simultaneously:
+
+1. **Terminal 1:** Flask server (`python app.py`)
+2. **Terminal 2:** ngrok tunnel (`ngrok http 5000`)
+3. **Terminal 3:** Your work terminal (optional, for commits, etc.)
+
+If either the Flask server or ngrok stops, the webhook won't work.
+
+## Production Deployment
+
+For production use, deploy to a cloud service instead of using ngrok:
+
+### Recommended Platforms:
+- **Railway**: Easy deployment, free tier available
+- **Heroku**: Classic choice, free tier available
+- **AWS EC2/ECS**: More control, requires setup
+- **Google Cloud Run**: Serverless, pay-per-use
+- **DigitalOcean**: Simple VPS option
+
+### Deployment Checklist:
+- [ ] Set environment variables in your hosting platform
+- [ ] Use a production WSGI server (gunicorn, waitress)
+- [ ] Enable HTTPS (required for webhooks)
+- [ ] Update Jira webhook URL to your production URL
+- [ ] Set up logging/monitoring
+- [ ] Consider using a database for tracking issue mappings
+
 ## Troubleshooting
 
 ### Webhook not received
-- Check that ngrok is running and the URL matches the Jira webhook configuration
-- Verify the webhook is enabled in Jira
-- Check Jira webhook logs for delivery failures
+- **Check ngrok is running:** Visit http://localhost:4040 to see ngrok status
+- **Verify URL matches:** The URL in Jira must exactly match your ngrok URL + `/webhook`
+- **Check Jira webhook logs:** Go to webhook settings → Click your webhook → View "Recent Deliveries"
+- **Firewall issues:** Ensure your firewall allows incoming connections on port 5000
 
-### Signature verification fails
-- Ensure `JIRA_WEBHOOK_SECRET` in `.env` matches the secret in Jira webhook configuration
-- Check that Jira is sending the `X-Hub-Signature` header
+### Signature verification fails (403 Forbidden)
+- **Secret mismatch:** Ensure `JIRA_WEBHOOK_SECRET` in `.env` matches Jira webhook secret exactly
+- **Check for spaces:** No extra spaces or newlines in the secret
+- **Restart Flask:** After changing `.env`, restart the Flask server
 
-### GitHub issue not created
-- Verify `GITHUB_TOKEN` has `repo` scope
-- Check that `GITHUB_REPO` is correct (format: `owner/repo`)
-- Review logs for GitHub API errors
+### GitHub issue not created (500 Error)
+- **Token expired:** GitHub tokens can expire - generate a new one
+- **Wrong scope:** Token must have `repo` scope (not just `public_repo`)
+- **Repository access:** Ensure the token has access to your repository
+- **Check logs:** Review Flask terminal for detailed error messages
+
+### Claude Code Action doesn't trigger
+- **Missing @claude tag:** Issue body must contain `@claude`
+- **Action not installed:** Verify Claude Code GitHub Action is installed on your repo
+- **Check Actions tab:** Go to GitHub repo → Actions tab to see if workflow ran
 
 ### Duplicate issues created
 - The duplicate check searches for the Jira key in existing issues
 - If issues are created very quickly, duplicates might slip through
+- Close the duplicate and Claude will work on the first one
+
+### ngrok "authentication failed" error
+- You need to sign up for ngrok: https://dashboard.ngrok.com/signup
+- Run: `ngrok config add-authtoken YOUR_TOKEN`
+- Get your token from: https://dashboard.ngrok.com/get-started/your-authtoken
 
 ## Future Enhancements
 

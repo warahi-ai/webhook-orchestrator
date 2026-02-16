@@ -118,10 +118,10 @@ class GitHubClient:
             "---",
             "",
             f"@claude Please implement this feature following these guidelines:",
-            f"- Create a branch named `feature/{jira_key}-{kebab_summary}`",
+            f"- Create a branch named `feature/{jira_key}-{kebab_summary}` from `develop`",
             "- Implement the requirements described above",
             "- Write comprehensive tests",
-            "- Open a PR when ready",
+            "- **Create a Pull Request targeting the `develop` branch**",
             "",
             f"This issue was automatically created from Jira ticket {jira_key}.",
         ])
