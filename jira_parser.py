@@ -148,6 +148,19 @@ def _adf_node_to_text(node: Dict[str, Any]) -> str:
     return text
 
 
+def _extract_custom_select_value(field_value: Any) -> str:
+    """
+    Extract the value from a Jira custom select field.
+
+    Select fields come as objects like: {"value": "high", "id": "10XXX"}
+    """
+    if isinstance(field_value, dict):
+        return field_value.get('value', '')
+    if isinstance(field_value, str):
+        return field_value
+    return ''
+
+
 def extract_ticket_info(payload: Dict[str, Any]) -> Dict[str, str]:
     """
     Extract ticket information from Jira webhook payload.
@@ -156,7 +169,8 @@ def extract_ticket_info(payload: Dict[str, Any]) -> Dict[str, str]:
         payload: Jira webhook payload
 
     Returns:
-        Dictionary with ticket key, summary, description, and acceptance criteria
+        Dictionary with ticket key, summary, description, acceptance criteria,
+        and claude_effort
     """
     issue = payload.get('issue', {})
     fields = issue.get('fields', {})
@@ -168,7 +182,6 @@ def extract_ticket_info(payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
     # Try to extract acceptance criteria from custom field or description
-    # Common custom field names for acceptance criteria
     acceptance_criteria = ''
     for field_key, field_value in fields.items():
         if 'acceptance' in field_key.lower() or 'criteria' in field_key.lower():
@@ -178,5 +191,28 @@ def extract_ticket_info(payload: Dict[str, Any]) -> Dict[str, str]:
 
     ticket_info['acceptance_criteria'] = acceptance_criteria
 
-    logger.info(f"Extracted ticket info for {ticket_info['key']}")
+    # Extract Claude Effort from custom field
+    # Supports: explicit field ID via env var, or auto-detect by scanning fields
+    import os
+    effort_field_id = os.getenv('JIRA_EFFORT_FIELD_ID', '')
+    claude_effort = ''
+
+    if effort_field_id and effort_field_id in fields:
+        # Use explicit field ID from env var
+        claude_effort = _extract_custom_select_value(fields[effort_field_id])
+        logger.info(f"Claude effort from {effort_field_id}: {claude_effort}")
+    else:
+        # Auto-detect: scan custom fields for select values matching effort levels
+        valid_efforts = {'low', 'medium', 'high'}
+        for field_key, field_value in fields.items():
+            if field_key.startswith('customfield_') and field_value:
+                value = _extract_custom_select_value(field_value).lower()
+                if value in valid_efforts:
+                    claude_effort = value
+                    logger.info(f"Claude effort auto-detected from {field_key}: {claude_effort}")
+                    break
+
+    ticket_info['claude_effort'] = claude_effort or 'medium'
+
+    logger.info(f"Extracted ticket info for {ticket_info['key']} (effort: {ticket_info['claude_effort']})")
     return ticket_info
