@@ -131,15 +131,14 @@ This is a **one-time setup** - ngrok will remember your token.
 In a **new terminal** (keep the Flask server running):
 
 ```bash
+# If you have a static domain (free tier includes one):
+ngrok http --url=your-static-domain.ngrok-free.dev 5000
+
+# Or without a static domain (URL changes on every restart):
 ngrok http 5000
 ```
 
-You'll see output like:
-```
-Forwarding  https://abc123-xyz.ngrok-free.dev -> http://localhost:5000
-```
-
-**Copy the HTTPS URL** (e.g., `https://abc123-xyz.ngrok-free.dev`) - you'll need it for Jira configuration.
+**Tip:** ngrok's free tier includes one static domain. Find yours at https://dashboard.ngrok.com/domains. Using a static domain means you **don't need to update the Jira webhook URL** every time you restart ngrok.
 
 Keep this terminal open and running.
 
@@ -336,24 +335,72 @@ Log entries include:
 
 ## Important Notes
 
+### Quick Start (Returning Users)
+
+If you've already completed the initial setup and just want to get the server running:
+
+**Terminal 1 - Flask server:**
+```bash
+cd webhook-orchestrator
+source venv/bin/activate
+python app.py
+```
+
+**Terminal 2 - ngrok tunnel:**
+```bash
+# With static domain (recommended - no need to update Jira webhook):
+ngrok http --url=your-static-domain.ngrok-free.dev 5000
+
+# Without static domain:
+ngrok http 5000
+```
+
+### Shutting Down
+
+**Stop the Flask server:** Press `Ctrl+C` in Terminal 1
+
+**Deactivate the virtual environment:**
+```bash
+deactivate
+```
+
+**Stop ngrok:** Press `Ctrl+C` in Terminal 2
+
+### Virtual Environment
+
+The project uses a Python virtual environment to isolate dependencies:
+
+```bash
+# Activate (required before running the server)
+source venv/bin/activate    # macOS/Linux
+venv\Scripts\activate       # Windows
+
+# Deactivate (when you're done working)
+deactivate
+
+# Recreate if something breaks
+rm -rf venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
 ### ngrok URL Changes
-**The ngrok URL changes every time you restart ngrok** (on the free tier). When this happens:
+
+If you're **not** using a static domain, the ngrok URL changes every time you restart. When this happens:
 
 1. Get your new ngrok URL: Check the ngrok terminal or visit http://localhost:4040
 2. Update Jira webhook: Edit your webhook in Jira with the new URL
 3. Test again: Move a ticket to verify it works
 
-For a permanent URL, consider:
-- Upgrading to ngrok paid plan (reserved domains)
-- Deploying to a cloud service (Heroku, AWS, Railway, etc.)
+**Tip:** Use a static domain to avoid this. ngrok's free tier includes one — find yours at https://dashboard.ngrok.com/domains.
 
 ### Keeping Everything Running
 
-You need **3 terminals** running simultaneously:
+You need **2 terminals** running simultaneously:
 
-1. **Terminal 1:** Flask server (`python app.py`)
-2. **Terminal 2:** ngrok tunnel (`ngrok http 5000`)
-3. **Terminal 3:** Your work terminal (optional, for commits, etc.)
+1. **Terminal 1:** Flask server (`source venv/bin/activate && python app.py`)
+2. **Terminal 2:** ngrok tunnel (`ngrok http --url=your-domain.ngrok-free.dev 5000`)
 
 If either the Flask server or ngrok stops, the webhook won't work.
 
