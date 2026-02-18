@@ -81,27 +81,6 @@ class GitHubClient:
         acceptance_criteria = ticket_info.get('acceptance_criteria', '')
         claude_effort = ticket_info.get('claude_effort', 'medium')
 
-        # Map effort levels to Claude instructions
-        effort_instructions = {
-            'low': (
-                "This is a **low effort** task. "
-                "Keep the implementation simple and focused. "
-                "Minimal exploration needed."
-            ),
-            'medium': (
-                "This is a **medium effort** task. "
-                "Implement thoroughly with proper error handling and tests."
-            ),
-            'high': (
-                "This is a **high effort** task. "
-                "Take a thorough approach: explore the codebase carefully, "
-                "consider edge cases, write comprehensive tests, and ensure "
-                "high-quality architecture."
-            ),
-        }
-
-        effort_text = effort_instructions.get(claude_effort, effort_instructions['medium'])
-
         # Create kebab-case version of summary for branch naming
         kebab_summary = self._to_kebab_case(summary)
 
@@ -137,9 +116,7 @@ class GitHubClient:
             "",
             "---",
             "",
-            f"@claude {effort_text}",
-            "",
-            "Please implement this feature following these guidelines:",
+            "@claude Please implement this feature following these guidelines:",
             f"- Create a branch named `feature/{jira_key}-{kebab_summary}` from `develop`",
             "- Implement the requirements described above",
             "- Write comprehensive tests",
